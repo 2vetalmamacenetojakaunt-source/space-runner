@@ -170,6 +170,12 @@ function playSound(effect) {
 
   if (effect === 'start' || effect === 'resume') {
     playTone(350, 560, 0.16, 'triangle');
+  } else if (effect === 'skin') {
+    playTone(440, 660, 0.12, 'sine');
+    playTone(660, 880, 0.12, 'sine', 0.08);
+  } else if (effect === 'sector') {
+    playTone(392, 523, 0.16, 'triangle');
+    playTone(523, 784, 0.2, 'triangle', 0.1);
   } else if (effect === 'pause') {
     playTone(500, 280, 0.14, 'triangle');
   } else if (effect === 'score') {
@@ -409,6 +415,7 @@ function updateHud() {
   if (nextSector !== state.sector) {
     state.sector = nextSector;
     state.sectorNoticeTime = 2.5;
+    playSound('sector');
   }
 
   scoreEl.textContent = String(state.score);
