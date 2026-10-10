@@ -19,8 +19,24 @@
         <span>Скин: <strong id="skinName">Стандарт</strong></span>
         <span>Сектор: <strong id="sectorName">Орбита Земли</strong></span>
         <span id="powerupStatus" aria-live="polite"></span>
+         <span>Сложность: <strong id="difficultyLevel">1</strong></span>
       </div>
       <div class="panel-actions">
+          <label class="level-picker" for="levelSelect">
+            <span>Стартовый уровень</span>
+            <select id="levelSelect" aria-label="Выбери стартовый уровень">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+            </select>
+          </label>
         <button id="pauseButton" class="secondary">Пауза</button>
       </div>
     </div>
@@ -54,7 +70,8 @@
           <span>ЖИЗНИ</span>
           <strong id="lives">3</strong>
         </div>
-        <button id="startButton" class="restart-button" type="button">Начать игру</button>
+          <button id="startButton" class="restart-button" type="button">Начать игру</button>
+          <button id="soundButton" class="secondary sound-button" type="button" aria-pressed="true">Звук: вкл</button>
       </aside>
     </div>
 

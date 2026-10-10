@@ -1,7 +1,9 @@
 # Space Runner
 
-Play the public browser game: https://2vetalmamacenetojakaunt-source.github.io/space-runner/
+Играй в браузере: https://2vetalmamacenetojakaunt-source.github.io/space-runner/
 
-Use W, A, S, D to fly and Escape to pause. Collect bonuses, avoid hazards, and advance through sectors.
+Выбери стартовый уровень от 1 до 10. Управление: W, A, S, D; Escape — пауза. Кнопка «Звук» включает и выключает эффекты.
 
-The leaderboard is saved in each visitor's browser and is not shared online.
+Собирай бонусы, уворачивайся от препятствий и пройди 10-й сектор, чтобы посадить корабль на Землю. Через 5 секунд начнётся новый, более сложный полёт.
+
+Таблица результатов и настройка звука хранятся отдельно в браузере каждого игрока.

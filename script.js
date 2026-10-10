@@ -7,22 +7,36 @@ const sectorNameEl = document.getElementById('sectorName');
 const skinMenuEl = document.getElementById('skinMenu');
 const startButton = document.getElementById('startButton');
 const pauseButton = document.getElementById('pauseButton');
+const soundButton = document.getElementById('soundButton');
+const levelSelectEl = document.getElementById('levelSelect');
+const difficultyLevelEl = document.getElementById('difficultyLevel');
 const leaderboardListEl = document.getElementById('leaderboardList');
 const bestScoreEl = document.getElementById('bestScore');
 const nicknameForm = document.getElementById('nicknameForm');
 const nicknameInput = document.getElementById('nicknameInput');
 const powerupStatusEl = document.getElementById('powerupStatus');
 const nicknameStorageKey = 'space-runner-nickname';
+const soundStorageKey = 'space-runner-sound';
+let soundEnabled = localStorage.getItem(soundStorageKey) !== 'off';
+let audioContext = null;
+const savedLevel = Number.parseInt(localStorage.getItem('space-runner-level') || '1', 10);
+let selectedLevel = Number.isFinite(savedLevel) ? Math.min(10, Math.max(1, savedLevel)) : 1;
 
 const state = {
   running: false,
+  phase: 'menu',
   score: 0,
   lives: 3,
   time: 0,
   paused: false,
   gameOver: false,
-  sector: 1,
+  sector: selectedLevel,
   sectorNoticeTime: 0,
+  difficulty: 0,
+  transitionTimer: 0,
+  landingDustTimer: 0,
+  victoryEffectTimer: 0,
+  exhaustTimer: 0,
 };
 
 const sectorThemes = [
@@ -54,6 +68,8 @@ const player = {
   skinIndex: 0,
   invuln: 0,
   shieldTime: 0,
+  magnetTime: 0,
+  rotation: 0,
 };
 
 const keys = {
@@ -73,6 +89,7 @@ const movementKeyByCode = {
 const stars = [];
 const pickups = [];
 const enemies = [];
+const particles = [];
 
 function renderSkinMenu() {
   if (!skinMenuEl) return;
@@ -92,6 +109,7 @@ function renderSkinMenu() {
   skinMenuEl.querySelectorAll('.skin-btn').forEach((button) => {
     button.addEventListener('click', () => {
       setSkin(Number(button.dataset.index));
+      playSound('skin');
     });
   });
 }
@@ -106,6 +124,106 @@ function setSkin(index) {
 
 function cycleSkin() {
   setSkin(player.skinIndex + 1);
+}
+
+function updateSoundButton() {
+  soundButton.textContent = soundEnabled ? 'Звук: вкл' : 'Звук: выкл';
+  soundButton.setAttribute('aria-pressed', String(soundEnabled));
+}
+
+function getAudioContext() {
+  if (!soundEnabled) return null;
+
+  const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextConstructor) return null;
+
+  try {
+    if (!audioContext) audioContext = new AudioContextConstructor();
+    if (audioContext.state === 'suspended') audioContext.resume().catch(() => {});
+    return audioContext;
+  } catch (error) {
+    return null;
+  }
+}
+
+function playTone(startFrequency, endFrequency, duration, waveform = 'sine', delay = 0) {
+  const context = getAudioContext();
+  if (!context) return;
+
+  const startTime = context.currentTime + delay;
+  const oscillator = context.createOscillator();
+  const volume = context.createGain();
+  oscillator.type = waveform;
+  oscillator.frequency.setValueAtTime(startFrequency, startTime);
+  oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, endFrequency), startTime + duration);
+  volume.gain.setValueAtTime(0.0001, startTime);
+  volume.gain.exponentialRampToValueAtTime(0.055, startTime + Math.min(0.02, duration / 3));
+  volume.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+  oscillator.connect(volume);
+  volume.connect(context.destination);
+  oscillator.start(startTime);
+  oscillator.stop(startTime + duration);
+}
+
+function playSound(effect) {
+  if (!soundEnabled) return;
+
+  if (effect === 'start' || effect === 'resume') {
+    playTone(350, 560, 0.16, 'triangle');
+  } else if (effect === 'pause') {
+    playTone(500, 280, 0.14, 'triangle');
+  } else if (effect === 'score') {
+    playTone(720, 980, 0.09, 'sine');
+  } else if (effect === 'bonus') {
+    playTone(520, 1040, 0.22, 'triangle');
+  } else if (effect === 'life') {
+    playTone(420, 840, 0.28, 'sine');
+  } else if (effect === 'shield' || effect === 'shieldHit') {
+    playTone(760, 390, 0.2, 'sine');
+  } else if (effect === 'magnet') {
+    playTone(330, 660, 0.18, 'triangle');
+    playTone(660, 880, 0.18, 'sine', 0.12);
+  } else if (effect === 'hit') {
+    playTone(180, 55, 0.24, 'sawtooth');
+  } else if (effect === 'gameOver') {
+    playTone(220, 110, 0.35, 'triangle');
+    playTone(150, 55, 0.42, 'sine', 0.16);
+  } else if (effect === 'landing') {
+    playTone(280, 85, 0.4, 'sine');
+  } else if (effect === 'victory') {
+    [523, 659, 784, 1047].forEach((frequency, index) => {
+      playTone(frequency, frequency * 1.02, 0.22, 'triangle', index * 0.12);
+    });
+  } else if (effect === 'launch') {
+    playTone(110, 520, 0.55, 'sawtooth');
+  } else if (effect === 'toggle') {
+    playTone(620, 900, 0.1, 'sine');
+  }
+}
+
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  localStorage.setItem(soundStorageKey, soundEnabled ? 'on' : 'off');
+  updateSoundButton();
+  if (soundEnabled) playSound('toggle');
+  else if (audioContext?.state === 'running') audioContext.suspend().catch(() => {});
+}
+
+function syncControlAvailability() {
+  const canChooseLevel = ['menu', 'gameOver', 'victory'].includes(state.phase);
+  levelSelectEl.disabled = !canChooseLevel;
+  pauseButton.disabled = state.phase !== 'playing';
+}
+
+function selectLevel() {
+  selectedLevel = Math.min(10, Math.max(1, Number(levelSelectEl.value) || 1));
+  localStorage.setItem('space-runner-level', String(selectedLevel));
+
+  if (state.phase === 'menu' || state.phase === 'gameOver') {
+    state.score = 0;
+    state.sector = selectedLevel;
+    sectorNameEl.textContent = sectorThemes[(selectedLevel - 1) % sectorThemes.length].name;
+  }
 }
 
 function getLeaderboard() {
@@ -176,30 +294,36 @@ function addScoreToLeaderboard(score) {
 
 function resetGame() {
   state.running = true;
+  state.phase = 'playing';
   state.gameOver = false;
   state.score = 0;
   state.lives = 3;
   state.time = 0;
   state.paused = false;
-  state.sector = 1;
+  state.sector = selectedLevel;
   state.sectorNoticeTime = 0;
 
   if (pauseButton) {
     pauseButton.textContent = 'Пауза';
+    pauseButton.disabled = false;
   }
   if (startButton) {
     startButton.disabled = false;
     startButton.textContent = 'Новая игра';
   }
+  syncControlAvailability();
 
   player.x = canvas.width / 2;
   player.y = canvas.height - 60;
   player.invuln = 0;
   player.shieldTime = 0;
+  player.magnetTime = 0;
+  player.rotation = 0;
 
   stars.length = 0;
   pickups.length = 0;
   enemies.length = 0;
+  particles.length = 0;
 
   initializeStars();
 
@@ -218,8 +342,70 @@ function initializeStars() {
   }
 }
 
+function spawnBurst(positionX, positionY, color, count = 14) {
+  for (let particleIndex = 0; particleIndex < count; particleIndex += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 35 + Math.random() * 155;
+    const lifetime = 0.35 + Math.random() * 0.55;
+    particles.push({
+      x: positionX,
+      y: positionY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      gravity: 35 + Math.random() * 95,
+      life: lifetime,
+      maxLife: lifetime,
+      size: 1.5 + Math.random() * 3.5,
+      color,
+    });
+  }
+}
+
+function spawnTrail() {
+  const color = playerSkins[player.skinIndex].wing;
+  const lifetime = 0.2 + Math.random() * 0.14;
+  particles.push({
+    x: player.x + (Math.random() - 0.5) * 7,
+    y: player.y + 13,
+    vx: (Math.random() - 0.5) * 30,
+    vy: 70 + Math.random() * 85,
+    gravity: 0,
+    life: lifetime,
+    maxLife: lifetime,
+    size: 1.2 + Math.random() * 2.2,
+    color,
+  });
+}
+
+function updateParticles(dt) {
+  for (let particleIndex = particles.length - 1; particleIndex >= 0; particleIndex -= 1) {
+    const particle = particles[particleIndex];
+    particle.life -= dt;
+    particle.x += particle.vx * dt;
+    particle.y += particle.vy * dt;
+    particle.vy += particle.gravity * dt;
+    particle.vx *= 0.985;
+    if (particle.life <= 0) particles.splice(particleIndex, 1);
+  }
+}
+
+function drawParticles() {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const particle of particles) {
+    ctx.globalAlpha = Math.max(0, particle.life / particle.maxLife);
+    ctx.fillStyle = particle.color;
+    ctx.shadowColor = particle.color;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function updateHud() {
-  const nextSector = Math.floor(state.score / 100) + 1;
+  const nextSector = Math.min(10, selectedLevel + Math.floor(state.score / 100));
   if (nextSector !== state.sector) {
     state.sector = nextSector;
     state.sectorNoticeTime = 2.5;
@@ -230,13 +416,21 @@ function updateHud() {
   if (sectorNameEl) {
     sectorNameEl.textContent = sectorThemes[(state.sector - 1) % sectorThemes.length].name;
   }
+  difficultyLevelEl.textContent = String(state.difficulty + 1);
   updatePowerupStatus();
+
+  if (state.phase === 'playing' && state.lives > 0 && state.score >= (11 - selectedLevel) * 100) {
+    beginLanding();
+  }
 }
 
 function updatePowerupStatus() {
   if (!powerupStatusEl) return;
 
-  const label = player.shieldTime > 0 ? `Щит: ${Math.ceil(player.shieldTime)}с` : '';
+  const activeEffects = [];
+  if (player.shieldTime > 0) activeEffects.push(`Щит: ${Math.ceil(player.shieldTime)}с`);
+  if (player.magnetTime > 0) activeEffects.push(`Магнит: ${Math.ceil(player.magnetTime)}с`);
+  const label = activeEffects.join(' | ');
   if (powerupStatusEl.textContent !== label) {
     powerupStatusEl.textContent = label;
   }
@@ -244,12 +438,12 @@ function updatePowerupStatus() {
 
 function spawnPickup() {
   const roll = Math.random();
-  const type = roll < 0.04 ? 'life' : roll < 0.16 ? 'shield' : roll < 0.32 ? 'bonus' : 'score';
+  const type = roll < 0.04 ? 'life' : roll < 0.14 ? 'shield' : roll < 0.23 ? 'magnet' : roll < 0.36 ? 'bonus' : 'score';
 
   pickups.push({
     x: 40 + Math.random() * (canvas.width - 80),
     y: -20,
-    radius: type === 'shield' || type === 'life' ? 12 : type === 'bonus' ? 11 : 9,
+    radius: type === 'shield' || type === 'life' || type === 'magnet' ? 12 : type === 'bonus' ? 11 : 9,
     speed: 150 + Math.random() * 80,
     type,
   });
@@ -267,7 +461,7 @@ function spawnEnemy() {
   ];
 
   const type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
-  const sectorBoost = Math.min(state.sector - 1, 8) * 8;
+  const sectorBoost = Math.min(state.sector - 1, 8) * 8 + state.difficulty * 24;
   const speed = type.speed[0] + sectorBoost + Math.random() * (type.speed[1] - type.speed[0]);
   const drift = (Math.random() - 0.5) * (type.drift[1] - type.drift[0]) + type.drift[0] * (Math.random() > 0.5 ? 1 : -1);
 
@@ -305,16 +499,134 @@ function togglePause() {
   }
 }
 
+function beginLanding() {
+  if (state.phase !== 'playing') return;
+
+  state.running = false;
+  state.phase = 'landing';
+  state.transitionTimer = 2.2;
+  playSound('landing');
+  state.landingDustTimer = 0;
+  state.landingStartX = player.x;
+  state.landingStartY = player.y;
+  state.paused = false;
+  enemies.length = 0;
+  pickups.length = 0;
+  startButton.disabled = true;
+  startButton.textContent = 'Посадка...';
+  syncControlAvailability();
+}
+
+function finishLanding() {
+  player.x = canvas.width / 2;
+  player.y = canvas.height - 60;
+  player.rotation = 0;
+  state.phase = 'victory';
+  state.transitionTimer = 5;
+  playSound('victory');
+  state.victoryEffectTimer = 0;
+  addScoreToLeaderboard(state.score);
+  startButton.disabled = true;
+  startButton.textContent = 'Взлёт через 5с';
+  syncControlAvailability();
+}
+
+function startNextFlight() {
+  state.difficulty += 1;
+  playSound('launch');
+  resetGame();
+  state.phase = 'launching';
+  state.running = false;
+  state.transitionTimer = 1.4;
+  player.x = canvas.width / 2;
+  player.y = canvas.height - 60;
+  player.rotation = 0.2;
+  startButton.disabled = true;
+  startButton.textContent = 'Взлёт...';
+  syncControlAvailability();
+}
+
+function updateTransition(dt) {
+  state.time += dt;
+  state.transitionTimer = Math.max(0, state.transitionTimer - dt);
+  updateParticles(dt);
+
+  if (state.phase === 'landing') {
+    const progress = 1 - state.transitionTimer / 2.2;
+    const eased = progress * progress * (3 - 2 * progress);
+    player.x = state.landingStartX + (canvas.width / 2 - state.landingStartX) * eased;
+    player.y = state.landingStartY + (canvas.height - 60 - state.landingStartY) * eased;
+    player.rotation = Math.sin(progress * Math.PI) * 0.22;
+    state.landingDustTimer -= dt;
+    if (state.landingDustTimer <= 0) {
+      state.landingDustTimer = 0.12;
+      spawnBurst(player.x, canvas.height - 36, '#a5e7b3', 3);
+    }
+
+    if (state.transitionTimer <= 0) {
+      finishLanding();
+    }
+    return;
+  }
+
+  if (state.phase === 'victory') {
+    startButton.textContent = `Взлёт через ${Math.ceil(state.transitionTimer)}с`;
+    state.victoryEffectTimer -= dt;
+    if (state.victoryEffectTimer <= 0) {
+      state.victoryEffectTimer = 0.65;
+      const colors = ['#ffe27a', '#69d2ff', '#ff8cb6', '#6ef3d8'];
+      const burstX = 90 + Math.random() * (canvas.width - 180);
+      const burstY = 55 + Math.random() * 150;
+      spawnBurst(burstX, burstY, colors[Math.floor(Math.random() * colors.length)], 18);
+    }
+    if (state.transitionTimer <= 0) startNextFlight();
+    return;
+  }
+
+  if (state.phase === 'launching') {
+    player.y = Math.max(canvas.height * 0.48, player.y - 170 * dt);
+    player.rotation = Math.max(0, player.rotation - 0.2 * dt);
+    state.exhaustTimer += dt;
+    if (state.exhaustTimer >= 0.035) {
+      state.exhaustTimer = 0;
+      spawnTrail();
+    }
+    state.landingDustTimer -= dt;
+    if (state.landingDustTimer <= 0) {
+      state.landingDustTimer = 0.05;
+      spawnBurst(player.x, player.y + 18, '#ffb34d', 4);
+    }
+    if (state.transitionTimer <= 0) {
+      state.phase = 'playing';
+      state.running = true;
+      startButton.disabled = false;
+      startButton.textContent = 'Новая игра';
+      syncControlAvailability();
+    }
+  }
+}
+
 function update(dt) {
+  if (['landing', 'victory', 'launching'].includes(state.phase)) {
+    updateTransition(dt);
+    return;
+  }
   if (!state.running || state.paused) return;
 
   state.time += dt;
   state.sectorNoticeTime = Math.max(0, state.sectorNoticeTime - dt);
   player.invuln = Math.max(0, player.invuln - dt);
   player.shieldTime = Math.max(0, player.shieldTime - dt);
+  player.magnetTime = Math.max(0, player.magnetTime - dt);
+  updateParticles(dt);
   updatePowerupStatus();
 
   handleInput(dt);
+  state.exhaustTimer += dt;
+  if (state.exhaustTimer >= 0.045) {
+    state.exhaustTimer = 0;
+    spawnTrail();
+  }
 
   for (const star of stars) {
     star.y += star.speed * 60 * dt;
@@ -328,13 +640,23 @@ function update(dt) {
     spawnPickup();
   }
 
-  const threatLevel = Math.min(state.sector - 1, 8);
+  const threatLevel = Math.min(state.sector - 1 + state.difficulty * 2, 8);
   if (Math.random() < (0.8 + threatLevel * 0.12) * dt) {
     spawnEnemy();
   }
 
   for (let i = pickups.length - 1; i >= 0; i -= 1) {
     const item = pickups[i];
+    if (player.magnetTime > 0 && item.type !== 'magnet') {
+      const pullX = player.x - item.x;
+      const pullY = player.y - item.y;
+      const pullDistance = Math.hypot(pullX, pullY) || 1;
+      if (pullDistance < 240) {
+        const pullSpeed = 180 + ((240 - pullDistance) / 240) * 160;
+        item.x += (pullX / pullDistance) * pullSpeed * dt;
+        item.y += (pullY / pullDistance) * pullSpeed * dt;
+      }
+    }
     item.y += item.speed * dt;
 
     const dx = player.x - item.x;
@@ -342,7 +664,9 @@ function update(dt) {
     const distance = Math.hypot(dx, dy);
 
     if (distance < player.width / 2 + item.radius) {
-      if (item.type === 'shield') {
+      if (item.type === 'magnet') {
+        player.magnetTime = 7;
+      } else if (item.type === 'shield') {
         player.shieldTime = 5;
       } else if (item.type === 'life') {
         if (state.lives < 5) state.lives += 1;
@@ -350,6 +674,9 @@ function update(dt) {
       } else {
         state.score += item.type === 'bonus' ? 50 : 10;
       }
+      const pickupColor = item.type === 'shield' ? '#69d2ff' : item.type === 'magnet' ? '#bd83ff' : item.type === 'life' ? '#ff6b8a' : item.type === 'bonus' ? '#ffd166' : '#78ffb3';
+      spawnBurst(item.x, item.y, pickupColor, 14);
+      playSound(item.type);
       pickups.splice(i, 1);
       updateHud();
       continue;
@@ -376,24 +703,31 @@ function update(dt) {
     if (distance < player.width / 2 + enemy.radius + 2) {
       if (player.shieldTime > 0) {
         enemies.splice(i, 1);
+        spawnBurst(enemy.x, enemy.y, enemy.color, 18);
+        playSound('shieldHit');
         state.score += 5;
         updateHud();
       } else if (player.invuln <= 0) {
         enemies.splice(i, 1);
+        spawnBurst(enemy.x, enemy.y, enemy.accent, 14);
+        playSound('hit');
         state.lives -= enemy.damage;
         player.invuln = 1.1;
         updateHud();
 
         if (state.lives <= 0) {
+          playSound('gameOver');
           state.running = false;
           state.paused = false;
           state.gameOver = true;
+          state.phase = 'gameOver';
           addScoreToLeaderboard(state.score);
           startButton.disabled = false;
           startButton.textContent = 'Играть заново';
           if (pauseButton) {
             pauseButton.textContent = 'Пауза';
           }
+          syncControlAvailability();
         }
       }
       continue;
@@ -412,6 +746,7 @@ function drawPlayer() {
 
   ctx.save();
   ctx.translate(player.x, player.y);
+  ctx.rotate(player.rotation);
   ctx.globalAlpha = pulse;
 
   ctx.shadowColor = skin.glow;
@@ -502,6 +837,16 @@ function drawPlayer() {
     ctx.stroke();
   }
 
+  if (player.magnetTime > 0) {
+    ctx.strokeStyle = 'rgba(189, 131, 255, 0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath();
+    ctx.arc(0, 0, 34 + Math.sin(state.time * 7) * 3, state.time, state.time + Math.PI * 1.7);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   ctx.restore();
 }
 
@@ -510,7 +855,9 @@ function drawPickup(item) {
   const bob = Math.sin(state.time * 4 + item.x * 0.02) * 3;
   ctx.translate(item.x, item.y + bob);
   if (item.type === 'bonus') ctx.rotate(state.time * 1.2);
-  ctx.fillStyle = item.type === 'bonus' ? '#ffd166' : item.type === 'life' ? '#ff6b8a' : '#78ffb3';
+  else if (item.type === 'score') ctx.rotate(Math.sin(state.time * 2 + item.x * 0.01) * 0.28);
+  else if (item.type === 'life') ctx.rotate(Math.sin(state.time * 2) * 0.08);
+  ctx.fillStyle = item.type === 'bonus' ? '#ffd166' : item.type === 'life' ? '#ff6b8a' : item.type === 'magnet' ? '#bd83ff' : '#78ffb3';
   ctx.shadowColor = item.type === 'shield' ? '#69d2ff' : ctx.fillStyle;
   ctx.shadowBlur = 18;
 
@@ -536,6 +883,24 @@ function drawPickup(item) {
     ctx.lineTo(-6, -4);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  if (item.type === 'magnet') {
+    ctx.strokeStyle = '#f0ddff';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-7, -6);
+    ctx.lineTo(-7, 1);
+    ctx.quadraticCurveTo(-7, 9, 0, 9);
+    ctx.quadraticCurveTo(7, 9, 7, 1);
+    ctx.lineTo(7, -6);
+    ctx.stroke();
+    ctx.fillStyle = '#fff4ff';
+    ctx.fillRect(-9, -8, 5, 4);
+    ctx.fillRect(4, -8, 5, 4);
     ctx.restore();
     return;
   }
@@ -576,6 +941,7 @@ function drawPickup(item) {
 function drawEnemy(enemy) {
   ctx.save();
   ctx.translate(enemy.x, enemy.y);
+  ctx.rotate(Math.sin(state.time * 1.3 + enemy.x * 0.02) * 0.06);
   const shell = ctx.createRadialGradient(-enemy.radius * 0.3, -enemy.radius * 0.35, enemy.radius * 0.08, 0, 0, enemy.radius * 1.2);
   shell.addColorStop(0, enemy.accent);
   shell.addColorStop(0.38, enemy.color);
@@ -690,12 +1056,15 @@ function drawBackground() {
   ctx.fillStyle = sectorThemes[(state.sector - 1) % sectorThemes.length].background;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  const twinkleTime = performance.now() * 0.002;
   for (const star of stars) {
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.globalAlpha = 0.35 + 0.55 * (0.5 + 0.5 * Math.sin(twinkleTime + star.x * 0.03));
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
     ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.globalAlpha = 1;
 }
 
 function drawGameOver() {
@@ -723,8 +1092,48 @@ function drawStartScreen() {
   ctx.fillText('Выбери скин и нажми «Начать игру»', canvas.width / 2, canvas.height / 2 + 24);
 }
 
+function drawGround() {
+  const progress = state.phase === 'landing' ? Math.min(1, 1 - state.transitionTimer / 2.2) : 1;
+  const edgeY = canvas.height + 100 - progress * 70;
+  const centerY = canvas.height + 100 - progress * 206;
+  const ground = ctx.createLinearGradient(0, canvas.height - 145, 0, canvas.height);
+  ground.addColorStop(0, '#83d6a3');
+  ground.addColorStop(0.12, '#347f68');
+  ground.addColorStop(1, '#142e3b');
+  ctx.fillStyle = ground;
+  ctx.beginPath();
+  ctx.moveTo(0, edgeY);
+  ctx.quadraticCurveTo(canvas.width / 2, centerY, canvas.width, edgeY);
+  ctx.lineTo(canvas.width, canvas.height);
+  ctx.lineTo(0, canvas.height);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(196, 255, 217, 0.75)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, edgeY);
+  ctx.quadraticCurveTo(canvas.width / 2, centerY, canvas.width, edgeY);
+  ctx.stroke();
+}
+
+function drawVictoryScreen() {
+  ctx.fillStyle = 'rgba(4, 14, 24, 0.35)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height - 85);
+  ctx.fillStyle = '#f5fff6';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 48px Arial';
+  ctx.fillText('ПОБЕДА!', canvas.width / 2, canvas.height / 2 - 30);
+  ctx.font = '22px Arial';
+  ctx.fillText('10-й сектор пройден', canvas.width / 2, canvas.height / 2 + 8);
+  ctx.fillText(`Новая сложность через ${Math.ceil(state.transitionTimer)}с`, canvas.width / 2, canvas.height / 2 + 42);
+}
+
 function render() {
   drawBackground();
+  if (['landing', 'victory', 'launching'].includes(state.phase)) {
+    drawGround();
+  }
 
   if (state.running) {
     for (const item of pickups) drawPickup(item);
@@ -751,11 +1160,24 @@ function render() {
       ctx.textAlign = 'center';
       ctx.fillText(`СЕКТОР ${state.sector}: ${theme.name}`, canvas.width / 2, 58);
     }
+  } else if (state.phase === 'landing' || state.phase === 'launching') {
+    drawPlayer();
+    ctx.fillStyle = 'rgba(3, 7, 14, 0.32)';
+    ctx.fillRect(0, 0, canvas.width, 64);
+    ctx.fillStyle = '#eaf7ff';
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 24px Arial';
+    ctx.fillText(state.phase === 'landing' ? 'ПОСАДКА НА ЗЕМЛЮ' : 'НОВЫЙ ВЗЛЁТ', canvas.width / 2, 42);
+  } else if (state.phase === 'victory') {
+    drawPlayer();
+    drawVictoryScreen();
   } else if (state.gameOver) {
     drawGameOver();
   } else {
     drawStartScreen();
   }
+
+  drawParticles();
 }
 
 let lastTime = 0;
@@ -808,6 +1230,7 @@ window.addEventListener('blur', () => {
 });
 
 startButton.addEventListener('click', () => {
+  playSound('start');
   resetGame();
   canvas.focus();
   startButton.textContent = 'Запуск...';
@@ -820,7 +1243,11 @@ startButton.addEventListener('click', () => {
 
 pauseButton.addEventListener('click', () => {
   togglePause();
+  playSound(state.paused ? 'pause' : 'resume');
 });
+
+soundButton.addEventListener('click', toggleSound);
+updateSoundButton();
 
 nicknameInput.value = localStorage.getItem(nicknameStorageKey) || 'Игрок';
 nicknameForm.addEventListener('submit', (event) => {
@@ -832,8 +1259,50 @@ nicknameForm.addEventListener('submit', (event) => {
   localStorage.setItem(nicknameStorageKey, nickname);
 });
 
+levelSelectEl.value = String(selectedLevel);
+levelSelectEl.addEventListener('change', selectLevel);
+
 setSkin(0);
 renderSkinMenu();
 renderLeaderboard();
 initializeStars();
+updateHud();
+syncControlAvailability();
 requestAnimationFrame(gameLoop);
+
+function drawGround() {
+  const progress = state.phase === 'landing' ? Math.min(1, 1 - state.transitionTimer / 2.2) : 1;
+  const edgeY = canvas.height + 100 - progress * 70;
+  const centerY = canvas.height + 100 - progress * 206;
+  const ground = ctx.createLinearGradient(0, canvas.height - 145, 0, canvas.height);
+  ground.addColorStop(0, '#83d6a3');
+  ground.addColorStop(0.12, '#347f68');
+  ground.addColorStop(1, '#142e3b');
+  ctx.fillStyle = ground;
+  ctx.beginPath();
+  ctx.moveTo(0, edgeY);
+  ctx.quadraticCurveTo(canvas.width / 2, centerY, canvas.width, edgeY);
+  ctx.lineTo(canvas.width, canvas.height);
+  ctx.lineTo(0, canvas.height);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(196, 255, 217, 0.85)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, edgeY);
+  ctx.quadraticCurveTo(canvas.width / 2, centerY, canvas.width, edgeY);
+  ctx.stroke();
+}
+
+function drawVictoryScreen() {
+  ctx.fillStyle = 'rgba(4, 14, 24, 0.35)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height - 90);
+  ctx.fillStyle = '#f5fff6';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 48px Arial';
+  ctx.fillText('ПОБЕДА!', canvas.width / 2, canvas.height / 2 - 30);
+  ctx.font = '22px Arial';
+  ctx.fillText('10-й сектор пройден', canvas.width / 2, canvas.height / 2 + 8);
+  ctx.fillText(`Новая сложность через ${Math.ceil(state.transitionTimer)}с`, canvas.width / 2, canvas.height / 2 + 42);
+}
