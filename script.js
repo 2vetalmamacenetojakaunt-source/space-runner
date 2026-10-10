@@ -20,6 +20,7 @@ const state = {
   lives: 3,
   time: 0,
   paused: false,
+  gameOver: false,
   sector: 1,
   sectorNoticeTime: 0,
 };
@@ -175,6 +176,7 @@ function addScoreToLeaderboard(score) {
 
 function resetGame() {
   state.running = true;
+  state.gameOver = false;
   state.score = 0;
   state.lives = 3;
   state.time = 0;
@@ -184,6 +186,10 @@ function resetGame() {
 
   if (pauseButton) {
     pauseButton.textContent = 'Пауза';
+  }
+  if (startButton) {
+    startButton.disabled = false;
+    startButton.textContent = 'Новая игра';
   }
 
   player.x = canvas.width / 2;
@@ -195,6 +201,13 @@ function resetGame() {
   pickups.length = 0;
   enemies.length = 0;
 
+  initializeStars();
+
+  updateHud();
+}
+
+function initializeStars() {
+  stars.length = 0;
   for (let i = 0; i < 110; i += 1) {
     stars.push({
       x: Math.random() * canvas.width,
@@ -203,8 +216,6 @@ function resetGame() {
       speed: Math.random() * 0.8 + 0.3,
     });
   }
-
-  updateHud();
 }
 
 function updateHud() {
@@ -376,7 +387,9 @@ function update(dt) {
         if (state.lives <= 0) {
           state.running = false;
           state.paused = false;
+          state.gameOver = true;
           addScoreToLeaderboard(state.score);
+          startButton.disabled = false;
           startButton.textContent = 'Играть заново';
           if (pauseButton) {
             pauseButton.textContent = 'Пауза';
@@ -698,6 +711,18 @@ function drawGameOver() {
   ctx.fillText(`Счёт: ${state.score}`, canvas.width / 2, canvas.height / 2 + 35);
 }
 
+function drawStartScreen() {
+  ctx.fillStyle = 'rgba(7, 11, 20, 0.48)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#e6f4ff';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 48px Arial';
+  ctx.fillText('Space Runner', canvas.width / 2, canvas.height / 2 - 20);
+  ctx.font = '22px Arial';
+  ctx.fillText('Выбери скин и нажми «Начать игру»', canvas.width / 2, canvas.height / 2 + 24);
+}
+
 function render() {
   drawBackground();
 
@@ -726,8 +751,10 @@ function render() {
       ctx.textAlign = 'center';
       ctx.fillText(`СЕКТОР ${state.sector}: ${theme.name}`, canvas.width / 2, 58);
     }
-  } else {
+  } else if (state.gameOver) {
     drawGameOver();
+  } else {
+    drawStartScreen();
   }
 }
 
@@ -783,11 +810,11 @@ window.addEventListener('blur', () => {
 startButton.addEventListener('click', () => {
   resetGame();
   canvas.focus();
-  startButton.textContent = 'Игра идёт';
+  startButton.textContent = 'Запуск...';
   startButton.disabled = true;
   setTimeout(() => {
     startButton.disabled = false;
-    startButton.textContent = 'Начать игру';
+    startButton.textContent = state.running ? 'Новая игра' : 'Играть заново';
   }, 800);
 });
 
@@ -808,5 +835,5 @@ nicknameForm.addEventListener('submit', (event) => {
 setSkin(0);
 renderSkinMenu();
 renderLeaderboard();
-resetGame();
+initializeStars();
 requestAnimationFrame(gameLoop);

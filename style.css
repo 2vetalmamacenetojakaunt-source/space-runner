@@ -233,13 +233,14 @@ h1 {
 .game-layout {
   width: min(96vw, 1100px);
   display: grid;
-  grid-template-columns: minmax(0, 980px) 104px;
+  grid-template-columns: minmax(0, 1fr) 140px;
   justify-content: center;
   align-items: stretch;
   gap: 12px;
 }
 
 .score-counter {
+  width: 100%;
   align-self: start;
   display: flex;
   flex-direction: column;
@@ -276,6 +277,15 @@ h1 {
 
 .counter-stat:last-child strong {
   color: var(--danger);
+}
+
+.restart-button {
+  width: 100%;
+  padding: 9px 6px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  box-shadow: 0 6px 14px rgba(105, 210, 255, 0.22);
 }
 
 button {
@@ -347,6 +357,7 @@ canvas:focus-visible {
     order: -1;
     flex-direction: row;
     justify-content: space-between;
+    gap: 10px;
     padding: 8px 12px;
   }
 
@@ -362,5 +373,11 @@ canvas:focus-visible {
 
   .score-counter strong {
     font-size: 1.25rem;
+  }
+
+  .restart-button {
+    width: auto;
+    flex: 1 1 104px;
+    max-width: 140px;
   }
 }
