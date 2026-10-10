@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Играй в Space Runner — космическую игру на реакцию: уворачивайся от шипов, собирай очки и выбирай скин корабля." />
+    <meta property="og:title" content="Space Runner — космическая игра" />
+    <meta property="og:description" content="Уворачивайся от шипов, собирай очки и выбирай скин корабля." />
+    <meta property="og:type" content="website" />
+    <title>Space Runner — космическая игра</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="panel">
+      <h1>Space Runner</h1>
+      <div class="hud">
+        <span>Скин: <strong id="skinName">Стандарт</strong></span>
+        <span>Сектор: <strong id="sectorName">Орбита Земли</strong></span>
+        <span id="powerupStatus" aria-live="polite"></span>
+      </div>
+      <div class="panel-actions">
+        <button id="startButton">Начать игру</button>
+        <button id="pauseButton" class="secondary">Пауза</button>
+      </div>
+    </div>
+
+    <div class="skin-panel">
+      <h2>Выбор скина</h2>
+      <div id="skinMenu" class="skin-menu" aria-label="Меню выбора скинов"></div>
+    </div>
+
+    <div class="leaderboard-panel">
+      <h2>Лидерборд</h2>
+      <form id="nicknameForm" class="nickname-form">
+        <label for="nicknameInput">Твой ник</label>
+        <input id="nicknameInput" name="nickname" type="text" maxlength="16" autocomplete="nickname" required />
+        <button type="submit">Сохранить</button>
+      </form>
+      <ol id="leaderboardList" class="leaderboard-list"></ol>
+      <div class="leaderboard-summary">Лучший счёт: <strong id="bestScore">0</strong></div>
+    </div>
+
+    <p class="keyboard-hint">W A S D — движение · Esc — пауза</p>
+    <div class="game-layout">
+      <canvas id="gameCanvas" width="960" height="540" tabindex="0" aria-label="Игра Space Runner"></canvas>
+      <aside class="score-counter" aria-label="Игровая статистика">
+        <div class="counter-stat">
+          <span>СЧЁТ</span>
+          <strong id="score">0</strong>
+        </div>
+        <span class="counter-divider" aria-hidden="true"></span>
+        <div class="counter-stat">
+          <span>ЖИЗНИ</span>
+          <strong id="lives">3</strong>
+        </div>
+      </aside>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
