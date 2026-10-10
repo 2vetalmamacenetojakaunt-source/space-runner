@@ -1,10 +1,7 @@
 # Space Runner
 
-Браузерная космическая игра на HTML Canvas.
+Play the public browser game: https://2vetalmamacenetojakaunt-source.github.io/space-runner/
 
-## Управление
+Use W, A, S, D to fly and Escape to pause. Collect bonuses, avoid hazards, and advance through sectors.
 
-- W, A, S, D — движение.
-- Esc — пауза.
-
-Собирай бонусы, уклоняйся от препятствий и проходи сектора.
+The leaderboard is saved in each visitor's browser and is not shared online.
